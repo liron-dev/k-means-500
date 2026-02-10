@@ -2,27 +2,48 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Live S&P 500 List</title>
+    <title>Step 4: Standardized Shapes</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .ticker-box { font-weight: bold; font-family: monospace; }
+        .val-box { font-family: monospace; font-size: 0.9em; }
+        td { vertical-align: middle; }
     </style>
 </head>
 <body class="bg-light">
     <div class="container mt-5">
-        <h1 class="mb-4">📈 Current S&P 500 Tickers</h1>
-        <div class="alert alert-info">
-            Live from Wikipedia: <strong>{{ count }}</strong> companies found.
-        </div>
+        <h1 class="mb-3">🧬 Market DNA: Standardized Returns</h1>
+        <p class="text-muted">
+            Displaying <strong>{{ count }}</strong> stocks.
+            Data: 5-Year Weekly Log Returns, Standardized (Mean=0, Std=1).
+        </p>
 
-        <div class="row g-2">
-            {% for ticker in tickers %}
-            <div class="col-6 col-md-2">
-                <div class="card p-2 text-center shadow-sm ticker-box">
-                    {{ ticker }}
-                </div>
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th width="10%">Ticker</th>
+                            <th width="20%">Latest Std Value</th>
+                            <th>Shape (Last 5 Years)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stock in stocks %}
+                        <tr>
+                            <td class="fw-bold">{{ stock.ticker }}</td>
+                            <td>
+                                <span class="badge {{ 'bg-success' if stock.last_val > 0 else 'bg-danger' }} val-box">
+                                    {{ stock.last_val }} σ
+                                </span>
+                            </td>
+                            <td>
+                                {{ stock.chart|safe }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
-            {% endfor %}
         </div>
     </div>
 </body>
