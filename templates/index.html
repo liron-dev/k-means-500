@@ -2,29 +2,87 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Market DNA</title>
+    <title>S&P 500 K-Means Clustering</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>td { vertical-align: middle; }</style>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        .sparkline { display: block; width: 150px; height: 40px; }
+        .cluster-header { cursor: pointer; }
+    </style>
 </head>
-<body class="bg-light p-4">
+<body class="p-4">
     <div class="container">
-        <h3>🧬 Market DNA <small class="text-muted">({{ stocks|length }} stocks)</small></h3>
-        <div class="card shadow-sm mt-3">
-            <table class="table table-hover mb-0">
-                <thead class="table-dark">
-                    <tr><th>Ticker</th><th>Latest Volatility</th><th>5-Year Trend</th></tr>
-                </thead>
-                <tbody>
-                    {% for s in stocks %}
-                    <tr>
-                        <td class="fw-bold">{{ s.ticker }}</td>
-                        <td><span class="badge {{ 'bg-success' if s.last_val > 0 else 'bg-danger' }}">{{ s.last_val }} σ</span></td>
-                        <td>{{ s.chart|safe }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <h2 class="mb-4">🧬 Market DNA Clustering <small class="text-muted">Steps 4-10</small></h2>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark text-white">Market Map (PCA Projection)</div>
+            <div class="card-body">
+                <div id="pca-chart" style="width:100%; height:500px;"></div>
+            </div>
+        </div>
+
+        <h4 class="mb-3">Optimized Clusters</h4>
+        <div class="accordion" id="clusterAccordion">
+            {% for c in clusters %}
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#c{{ c.id }}">
+                        <strong>Cluster {{ c.id }}</strong> &nbsp; <span class="badge bg-secondary">{{ c.members|length }} Stocks</span>
+                    </button>
+                </h2>
+                <div id="c{{ c.id }}" class="accordion-collapse collapse" data-bs-parent="#clusterAccordion">
+                    <div class="accordion-body p-0">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr><th>Ticker</th><th>Vol (σ)</th><th>5Y Trend</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for m in c.members %}
+                                <tr>
+                                    <td class="fw-bold">{{ m.ticker }}</td>
+                                    <td>{{ m.last_vol }}</td>
+                                    <td>{{ m.sparkline|safe }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
         </div>
     </div>
+
+    <script>
+        // Draw Scatter Plot
+        const rawData = {{ pca_data | tojson }};
+        const clusters = [...new Set(rawData.map(d => d.cluster))].sort();
+
+        const data = clusters.map(cId => {
+            const subset = rawData.filter(d => d.cluster === cId);
+            return {
+                x: subset.map(d => d.x),
+                y: subset.map(d => d.y),
+                text: subset.map(d => d.ticker),
+                mode: 'markers',
+                type: 'scatter',
+                name: 'Cluster ' + cId,
+                marker: { size: 8 }
+            };
+        });
+
+        const layout = {
+            title: 'Cluster Separation (PCA)',
+            hovermode: 'closest',
+            xaxis: { title: 'PC1' },
+            yaxis: { title: 'PC2' },
+            margin: { t: 40, b: 40, l: 40, r: 40 }
+        };
+
+        Plotly.newPlot('pca-chart', data, layout, {responsive: true});
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
