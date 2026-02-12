@@ -2,87 +2,130 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>S&P 500 K-Means Clustering</title>
+    <title>AI Portfolio Optimizer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
         body { background-color: #f8f9fa; }
-        .sparkline { display: block; width: 150px; height: 40px; }
-        .cluster-header { cursor: pointer; }
+        .container { max-width: 1400px; padding: 40px 0; }
+        .card { border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 30px; border-radius: 12px; }
+        .card-header { font-weight: bold; font-size: 1.1rem; border-radius: 12px 12px 0 0 !important; }
+
+        /* Sparkline Enlargement */
+        .sparkline-container { width: 450px; }
+
+        /* Table Accessibility */
+        .table { font-size: 1rem; }
+        .table td { vertical-align: middle; }
+
+        /* Chart sizing */
+        .chart-full { width: 100%; height: 600px; }
+        .chart-compact { width: 100%; height: 600px; } /* Smaller height, will be constrained by grid */
     </style>
 </head>
 <body class="p-4">
     <div class="container">
-        <h2 class="mb-4">🧬 Market DNA Clustering <small class="text-muted">Steps 4-10</small></h2>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>🧬 AI Portfolio Optimizer <small class="text-muted fs-6">Borst Method + Optuna</small></h2>
+            <span class="badge bg-success fs-6">Gemini 2.0 Flash</span>
+        </div>
 
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-dark text-white">Market Map (PCA Projection)</div>
+        <div class="card">
+            <div class="card-header bg-dark text-white">📈 Performance: Optimized Portfolio vs. Clusters</div>
             <div class="card-body">
-                <div id="pca-chart" style="width:100%; height:500px;"></div>
+                <div id="perf-chart" class="chart-full"></div>
             </div>
         </div>
 
-        <h4 class="mb-3">Optimized Clusters</h4>
-        <div class="accordion" id="clusterAccordion">
-            {% for c in clusters %}
-            <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#c{{ c.id }}">
-                        <strong>Cluster {{ c.id }}</strong> &nbsp; <span class="badge bg-secondary">{{ c.members|length }} Stocks</span>
-                    </button>
-                </h2>
-                <div id="c{{ c.id }}" class="accordion-collapse collapse" data-bs-parent="#clusterAccordion">
-                    <div class="accordion-body p-0">
-                        <table class="table table-sm table-hover mb-0">
-                            <thead class="table-light">
-                                <tr><th>Ticker</th><th>Vol (σ)</th><th>5Y Trend</th></tr>
-                            </thead>
-                            <tbody>
-                                {% for m in c.members %}
-                                <tr>
-                                    <td class="fw-bold">{{ m.ticker }}</td>
-                                    <td>{{ m.last_vol }}</td>
-                                    <td>{{ m.sparkline|safe }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header text-center">📍 Market Map: Cluster Separation (PCA)</div>
+                    <div class="card-body">
+                        <div id="pca-chart" class="chart-compact"></div>
                     </div>
                 </div>
             </div>
-            {% endfor %}
+        </div>
+
+        <div class="card">
+            <div class="card-header">📂 AI-Named Clusters & Weights</div>
+            <div class="card-body p-0">
+                <div class="accordion accordion-flush" id="clusterAccordion">
+                    {% for c in clusters %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#c{{ c.id }}">
+                                <div class="d-flex w-100 justify-content-between align-items-center me-4">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <span class="fs-5"><strong>{{ c.name }}</strong></span>
+                                        <span class="badge bg-light text-dark border">{{ c.count }} Stocks</span>
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill p-2">Allocation: {{ c.weight }}</span>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="c{{ c.id }}" class="accordion-collapse collapse" data-bs-parent="#clusterAccordion">
+                            <div class="accordion-body p-0">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 15%">Ticker</th>
+                                            <th style="width: 15%">Vol (σ)</th>
+                                            <th style="width: 70%">5-Year Cumulative Trend</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for m in c.members %}
+                                        <tr>
+                                            <td class="fw-bold text-primary">{{ m.ticker }}</td>
+                                            <td>{{ m.last_vol }}</td>
+                                            <td class="sparkline-container">{{ m.sparkline|safe }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // Draw Scatter Plot
-        const rawData = {{ pca_data | tojson }};
-        const clusters = [...new Set(rawData.map(d => d.cluster))].sort();
-
-        const data = clusters.map(cId => {
-            const subset = rawData.filter(d => d.cluster === cId);
-            return {
-                x: subset.map(d => d.x),
-                y: subset.map(d => d.y),
-                text: subset.map(d => d.ticker),
-                mode: 'markers',
-                type: 'scatter',
-                name: 'Cluster ' + cId,
-                marker: { size: 8 }
-            };
-        });
-
-        const layout = {
-            title: 'Cluster Separation (PCA)',
-            hovermode: 'closest',
-            xaxis: { title: 'PC1' },
-            yaxis: { title: 'PC2' },
-            margin: { t: 40, b: 40, l: 40, r: 40 }
+        const commonLayout = {
+            margin: { t: 40, r: 30, l: 50, b: 50 },
+            legend: { orientation: 'h', y: 1.15 }
         };
 
-        Plotly.newPlot('pca-chart', data, layout, {responsive: true});
-    </script>
+        // --- 1. Performance Chart (All Visible) ---
+        const perfData = {{ perf_data | tojson }};
+        const perfTraces = Object.entries(perfData.sectors).map(([name, vals]) => ({
+            x: perfData.dates, y: vals, name: name, type: 'scatter', mode: 'lines',
+            line: { width: 1.5 }, opacity: 0.6
+            // 'visible: legendonly' REMOVED so they show by default
+        }));
+        perfTraces.push({
+            x: perfData.dates, y: perfData.optimized, name: '✨ Optimized Portfolio',
+            type: 'scatter', mode: 'lines', line: { color: '#0d6efd', width: 4 }
+        });
+        Plotly.newPlot('perf-chart', perfTraces, { ...commonLayout, hovermode: 'x unified' });
 
+        // --- 2. PCA Chart (Centered & Square-ish) ---
+        const pcaRaw = {{ pca_data | tojson }};
+        const clusters = [...new Set(pcaRaw.map(d => d.cluster))].sort();
+        const pcaTraces = clusters.map(cName => {
+            const subset = pcaRaw.filter(d => d.cluster === cName);
+            return {
+                x: subset.map(d => d.x), y: subset.map(d => d.y), text: subset.map(d => d.ticker),
+                name: cName, mode: 'markers', type: 'scatter', marker: { size: 10 }
+            };
+        });
+        // We rely on the container size for width, height is set in CSS
+        Plotly.newPlot('pca-chart', pcaTraces, commonLayout);
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
