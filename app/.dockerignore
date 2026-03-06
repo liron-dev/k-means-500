@@ -1,0 +1,8 @@
+# Python byte code
+__pycache__/
+*.py[cod]
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store

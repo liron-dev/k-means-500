@@ -1,2 +1,26 @@
-meta.csv
-prices.csv
+# Python Virtual Environment
+.venv/
+venv/
+ENV/
+
+# App Data & Cache
+__pycache__/
+*.py[cod]
+
+# Terraform State & Local Config
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+*.tfvars
+*.tfvars.json
+terraform.tfvars
+terraform.tfvars.json
+
+# Terraform build artifacts (the zip created by main.tf)
+terraform/app_version.zip
+
+# IDEs & OS
+.idea/
+.vscode/
+.DS_Store

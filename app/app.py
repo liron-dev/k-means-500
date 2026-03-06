@@ -6,6 +6,15 @@ from sklearn.decomposition import PCA
 from scipy.stats import zscore
 import warnings
 
+
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://finance.yahoo.com/'
+})
+
 # 🤫 Silence Warnings & Logs
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -45,32 +54,54 @@ ETF_UNIVERSE = list(set([
 
 def get_data():
     fm, fp = 'meta.csv', 'prices.csv'
-    if os.path.exists(fm) and os.path.exists(fp) and (time.time() - os.path.getmtime(fp) < 86400):
-        print("⚡ Loading from Cache...")
-        prices = pd.read_csv(fp, index_col=0, parse_dates=True)
-        if len([c for c in ETF_UNIVERSE if c in prices.columns]) > 50:
-            return pd.read_csv(fm, index_col=0), prices
-        print("⚠️ Cache stale (missing ETFs). Redownloading...")
+    
+    # 1. Try to load existing local files first
+    meta_local = None
+    prices_local = None
+    
+    if os.path.exists(fm) and os.path.exists(fp):
+        print("📁 Found local CSV files. Loading...")
+        try:
+            meta_local = pd.read_csv(fm, index_col=0)
+            prices_local = pd.read_csv(fp, index_col=0, parse_dates=True)
+            # If data is fresh enough (less than 24h), just return it
+            if (time.time() - os.path.getmtime(fp) < 86400):
+                print("⚡ Data is fresh. Skipping download.")
+                return meta_local, prices_local
+        except Exception as e:
+            print(f"⚠️ Error reading local files: {e}")
 
-    print("🚀 Step 1: Downloading New Data...")
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # 2. Try to download new data
+    print("🚀 Step 1: Attempting to Download New Data...")
     try:
-        df = pd.read_html(io.StringIO(
-            requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', headers=headers).text))[0]
+        # Wikipedia Sector Data
+        headers = {"User-Agent": "Mozilla/5.0"}
+        wiki_resp = requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', headers=headers, timeout=10)
+        df = pd.read_html(io.StringIO(wiki_resp.text))[0]
         df['Symbol'] = df['Symbol'].str.replace('.', '-', regex=False)
         meta = df.set_index('Symbol')[['GICS Sector', 'GICS Sub-Industry']]
-        meta.to_csv(fm)
-    except:
-        if os.path.exists(fm):
-            meta = pd.read_csv(fm, index_col=0)
+        
+        # Prices Data
+        all_ticks = list(set(meta.index.tolist() + ['^GSPC'] + ETF_UNIVERSE))
+        raw = yf.download(all_ticks, period="5y", interval="1wk", progress=False, auto_adjust=True, session=session)['Close']
+        
+        if raw is not None and not raw.empty:
+            if isinstance(raw.columns, pd.MultiIndex): 
+                raw.columns = raw.columns.get_level_values(0)
+            meta.to_csv(fm)
+            raw.to_csv(fp)
+            return meta, raw
         else:
-            return None, None
+            raise ValueError("Yahoo Finance returned empty data.")
 
-    all_ticks = list(set(meta.index.tolist() + ['^GSPC'] + ETF_UNIVERSE))
-    raw = yf.download(all_ticks, period="5y", interval="1wk", progress=False, auto_adjust=True)['Close']
-    if isinstance(raw.columns, pd.MultiIndex): raw.columns = raw.columns.get_level_values(0)
-    raw.to_csv(fp)
-    return meta, raw
+    except Exception as e:
+        print(f"❌ Download failed: {e}")
+        if prices_local is not None:
+            print("🔄 Reverting to local CSV files...")
+            return meta_local, prices_local
+        else:
+            print("🚨 CRITICAL: No local data and download failed.")
+            return None, None
 
 
 def get_ultimate_etf_portfolio(target_ret, etf_data):
@@ -124,7 +155,7 @@ def get_ultimate_etf_portfolio(target_ret, etf_data):
 
     print("    ↳ Running Thousands Of Genetic Optimization Trials (Deep Research)...")
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=2000)
+    study.optimize(objective, n_trials=1000)
 
     best_w = {k: v for k, v in study.best_params.items() if v >= 0.15}
 
@@ -141,6 +172,13 @@ def get_ultimate_etf_portfolio(target_ret, etf_data):
 
 def run_pipeline():
     meta, prices = get_data()
+    
+    if prices is None or meta is None:
+        print("🛑 Pipeline halted: No data available.")
+        return
+
+    # Ensure all column names are strings for filtering
+    prices.columns = prices.columns.astype(str)
 
     valid_etfs = [c for c in ETF_UNIVERSE if c in prices.columns]
     etf_prices = prices[valid_etfs]
@@ -221,7 +259,7 @@ def run_pipeline():
         return (r.mean() / (r.std() + 1e-9)) * np.sqrt(52) - (0.1 if np.count_nonzero(w) > 4 else 0)
 
     study = optuna.create_study(direction="maximize")
-    study.optimize(obj_stock, n_trials=2000)
+    study.optimize(obj_stock, n_trials=1000)
 
     best_w = {k: v for k, v in study.best_params.items() if v >= 0.10}
     tot_w = sum(best_w.values())
@@ -272,4 +310,4 @@ if __name__ == '__main__':
             pass
 
     run_pipeline()
-    app.run(port=5000, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
